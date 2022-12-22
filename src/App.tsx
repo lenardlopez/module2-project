@@ -95,6 +95,21 @@ function App() {
     false
   );
 
+  // create state variable to check balance 
+  const [sufficientBalance, setSufficientBalance] = useState(
+    true
+  );  
+
+  // create state variable to check successful transaction
+  const [successfulTransaction, setSuccessfulTransaction] = useState(
+    false
+  );  
+
+  // create state variable to check if airdrop or transaction
+  const [isAirDrop, setIsAirDrop] = useState(
+    true
+  );  
+
   // this is the function that runs whenever the component updates (e.g. render, refresh)
   useEffect(() => {
     const provider = getProvider();
@@ -108,12 +123,14 @@ function App() {
    * @description prompts user to create a new Solana account and Airdrop 2 SOL.
    * This function is called when the connect create a new Solana account is clicked
    */
-  const createAccount = async () => {    
+  const performAirDrop = async () => {    
+      setIsError(false);
+
+      setbuttonEnabled(false);
+
+      setIsAirDrop(true);
+
       try {
-        setIsError(false);
-
-        setbuttonEnabled(false);
-
         const sourceBeforeAirdropWalletBalance = await connection.getBalance(sourceWallet.publicKey);
         setSourceWalletBalance(sourceBeforeAirdropWalletBalance);
 
@@ -135,9 +152,14 @@ function App() {
 
         const sourceAfterAirdropWalletBalance = await connection.getBalance(sourceWallet.publicKey);
         setSourceWalletBalance(sourceAfterAirdropWalletBalance);
+        console.log(`source after airdrop wallet balance: ${sourceAfterAirdropWalletBalance / LAMPORTS_PER_SOL} SOL`);
 
         setbuttonEnabled(true);
+
+        setSufficientBalance(true);
       } catch (error) {
+        console.error(error);
+
         setIsError(true);
 
         setbuttonEnabled(true);
@@ -149,6 +171,12 @@ function App() {
    * This function is called when the connect wallet button is clicked
    */
   const connectWallet = async () => {
+    setIsError(false);
+
+    setbuttonEnabled(false);
+
+    setSuccessfulTransaction(false);
+
     // @ts-ignore
     const { solana } = window;
 
@@ -157,10 +185,6 @@ function App() {
       try {
         const response = await solana.connect();
         
-        setIsError(false);
-
-        setbuttonEnabled(false);
-
         const sourceBeforeConnectWalletBalance = await connection.getBalance(sourceWallet.publicKey);
         setSourceWalletBalance(sourceBeforeConnectWalletBalance);
 
@@ -174,7 +198,9 @@ function App() {
         setTargetWalletBalance(targetAfterConnectWalletBalance);
 
         setbuttonEnabled(true);
-      } catch (error) {
+      } catch (error) {        
+        console.error(error);
+        
         setIsError(true);
 
         setbuttonEnabled(true);
@@ -186,7 +212,13 @@ function App() {
    * @description prompts user to transfer to new wallet.
    * This function is called when the transfer to new wallet is clicked
    */
-   const performTransaction = async () => {
+   const performTransfer = async () => {
+    setIsError(false);
+
+    setbuttonEnabled(false);
+
+    setIsAirDrop(false);
+
     // @ts-ignore
     const { solana } = window;
 
@@ -196,10 +228,6 @@ function App() {
         const response = await solana.connect();
         const targetWallet = new PublicKey(response.publicKey.toString());
 
-        setIsError(false);
-
-        setbuttonEnabled(false);
-
         const sourceBeforeTransferWalletBalance = await connection.getBalance(sourceWallet.publicKey);
         setSourceWalletBalance(sourceBeforeTransferWalletBalance);
 
@@ -207,7 +235,7 @@ function App() {
           SystemProgram.transfer({
               fromPubkey: sourceWallet.publicKey,
               toPubkey: targetWallet,
-              lamports: LAMPORTS_PER_SOL / 800
+              lamports: 2 * LAMPORTS_PER_SOL
           })
         );
 
@@ -225,10 +253,44 @@ function App() {
         setTargetWalletBalance(targetAfterTransferWalletBalance);
 
         setbuttonEnabled(true);
+
+        setSuccessfulTransaction(true);
       } catch (error) {
+        let consoleError: any = error;
+        let errorMsg = "Error: failed to send transaction: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x1";
+
+        if (consoleError == errorMsg) {
+          setSufficientBalance(false);          
+        }
+        
+        console.error(consoleError);
+
         setIsError(true);
 
         setbuttonEnabled(true);
+
+        setSuccessfulTransaction(false);
+      }
+    }
+  };
+
+  /**
+   * @description prompts user to disconnect wallet if it exists.
+	 * This function is called when the disconnect wallet button is clicked
+   */
+  const disconnectWallet = async () => {
+    // @ts-ignore
+    const { solana } = window;
+
+		// checks if phantom wallet exists
+    if (solana) {
+      try {
+				// disconnects wallet and returns response which includes the wallet public key
+        const response = await solana.disconnect();
+				// update walletKey to be undefined
+        setWalletKey(undefined);
+      } catch (error) {
+        console.error(error);
       }
     }
   };
@@ -237,8 +299,35 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h2>Perform a connection, airdrop & transfer to a Phantom Wallet</h2>
+        <h2>Perform a connection, airdrop, transfer & disconnection to a Phantom Wallet</h2>
       </header>
+
+      {provider && walletKey && sufficientBalance == false && buttonEnabled == true && (
+        <button
+          style={{
+            fontSize: "16px",
+            padding: "15px",
+            fontWeight: "bold",
+            borderRadius: "5px",
+          }}
+          onClick={performAirDrop}
+        >
+          AirDrop
+        </button>
+      )}
+
+      {provider && walletKey && sufficientBalance == false && buttonEnabled == false && (
+        <button disabled
+          style={{
+            fontSize: "16px",
+            padding: "15px",
+            fontWeight: "bold",
+            borderRadius: "5px",
+          }}
+        >
+          AirDrop
+        </button>
+      )}
 
       {provider && !walletKey && sourceWalletBalance === 0 && buttonEnabled == true && (
         <button
@@ -248,7 +337,7 @@ function App() {
             fontWeight: "bold",
             borderRadius: "5px",
           }}
-          onClick={createAccount}
+          onClick={performAirDrop}
         >
           Create a new Solana account
         </button>
@@ -263,7 +352,7 @@ function App() {
             borderRadius: "5px",
           }}
         >
-          Create a new Solana account
+          Create a new Solana account    
         </button>
       )}
 
@@ -294,7 +383,7 @@ function App() {
         </button>
       )}
 
-      {provider && walletKey && sourceWalletBalance > 0 && buttonEnabled == true && (
+      {provider && walletKey && sourceWalletBalance > 0 && buttonEnabled == true && sufficientBalance == true && successfulTransaction == false && (
         <button
           style={{
             fontSize: "16px",
@@ -302,13 +391,13 @@ function App() {
             fontWeight: "bold",
             borderRadius: "5px",
           }}
-          onClick={performTransaction}
+          onClick={performTransfer}
         >
           Transfer to Phantom Wallet
         </button>
       )}
 
-      {provider && walletKey && sourceWalletBalance > 0 && buttonEnabled == false && (
+      {provider && walletKey && sourceWalletBalance > 0 && buttonEnabled == false && sufficientBalance == true && successfulTransaction == false && (
         <button disabled
           style={{
             fontSize: "16px",
@@ -321,6 +410,20 @@ function App() {
         </button>
       )}
 
+      {provider && walletKey && successfulTransaction == true && (
+          <button
+            style={{
+              fontSize: "16px",
+              padding: "15px",
+              fontWeight: "bold",
+              borderRadius: "5px",
+            }}
+            onClick={disconnectWallet}
+          >
+            Disconnect Wallet 
+          </button>
+      )}
+
       {!provider && (
         <p>
           No provider found. Install{" "}
@@ -331,18 +434,18 @@ function App() {
       <p>BAL: {sourceWalletBalance / LAMPORTS_PER_SOL} SOL</p>
       <p>PHANTOM BAL: {targetWalletBalance / LAMPORTS_PER_SOL} SOL</p>
 
-      <p>{isError == true && sourceWalletBalance === 0 && buttonEnabled == true && (
-        "An error occurred while performing a connection or Airdrop!"
+      <p>{isError == true && sourceWalletBalance === 0 && buttonEnabled == true && isAirDrop == true && (
+        "An error occurred while connecting or airdropping!"
         )}
       </p>
 
       <p>{isError == true && provider && !walletKey && sourceWalletBalance > 0 && buttonEnabled == true && (
-        "An error occurred while connecting to Phantom Wallet!"
+        "An error occurred while CONNECTING to Phantom Wallet!"
         )}
       </p>
 
-      <p>{isError == true && provider && walletKey && sourceWalletBalance > 0 && buttonEnabled == true && (
-        "An error occurred while transferring SOL to Phantom Wallet!"
+      <p>{isError == true && provider && walletKey && sourceWalletBalance > 0 && buttonEnabled == true && isAirDrop == false && (
+        "Insufficient balance! Please press Airdrop to increase balance."
         )}
       </p>
     </div>    
